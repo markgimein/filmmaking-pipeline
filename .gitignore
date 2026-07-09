@@ -1,0 +1,13 @@
+# Secrets — NEVER commit real API keys. Copy api_keys.example.txt -> api_keys.txt
+film_template/api_keys.txt
+api_keys.txt
+
+# Python
+__pycache__/
+*.pyc
+
+# Per-project working files (templates are copied into a film folder and renamed)
+film_config.py
+
+# macOS
+.DS_Store

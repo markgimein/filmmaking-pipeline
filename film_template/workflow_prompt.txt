@@ -1,0 +1,420 @@
+AI FILM PRODUCTION WORKFLOW PROMPT
+====================================
+Use this prompt (or adapt it) when asking Claude to produce a new film.
+
+----------------------------------------------------------------------
+
+I need to create an AI-generated short film. Here is the workflow:
+
+1. SCREENPLAY
+   Create a screenplay based on the following prompt: [YOUR PROMPT HERE]
+   Write it in traditional screenplay form. The film should be approximately
+   [LENGTH] minutes long.
+
+   Before writing, if anything in the prompt above looks like an important
+   mistake or misspelling -- a garbled or doubtful name, a wrong date, an
+   inconsistent spelling -- ask the user to clarify it BEFORE generating
+   anything. Spell every name consistently throughout the screenplay.
+
+1b. STANDARD BY DEFAULT; CHAINED SEGMENTS ONLY ON REQUEST
+   Every film is a STANDARD film -- independent shots, each with its own
+   opening image -- UNLESS the user explicitly asks for continuous scenes or
+   chained segments. Do not use chaining on your own initiative, and there is
+   no need to ask about it up front. If the user does ask, the preferred
+   method is FORWARD FRAME-CHAINING (chain_regen.py; see the README's
+   "Forward frame-chaining" section): each chained shot opens on the previous
+   shot's extracted last frame.
+
+   IMPORTANT: If the user gives their own specific rules for video creation in
+   the prompt, those rules OVERRIDE the defaults below (and in the README).
+   Where this prompt and the README disagree, the README wins.
+
+2. SEGMENT BREAKDOWN
+   Divide the script into segments (standard rules by default; the user's own
+   rules win if they gave any):
+   - Each segment must be between 4 and 15 seconds -- no shorter, no longer.
+     There is NO preference for longer segments: use the length the action
+     naturally needs; shorter segments are fine.
+   - PACING: budget dialogue at about 2.5 WORDS PER SECOND when setting each
+     segment's duration, plus only the action time actually needed. Do not pad
+     the seconds -- the model fills whatever time it is given, so a generous
+     duration IS a slow scene. (Every video prompt also carries an automatic
+     PACING rule pushing brisk delivery with no dead air.)
+   - A segment MAY contain multiple shots -- it can cut within itself (e.g. to
+     a closeup), with the internal cut described in the video prompt. Don't
+     split a segment just because the shot changes; split where the scene
+     changes or a different speaker takes over.
+   - Every segment begins with an opening image. (Chained segments, which open
+     on the previous shot's extracted last frame instead, are used only when
+     the user asked for continuous scenes.)
+   - No more than one person speaks per segment, and no conversation stretches
+     over more than two segments (conversations are very short BY DESIGN;
+     voice-overs/narration are not conversations and can run long).
+
+   If a voiceover or dialogue would be badly interrupted by a cut, keep the
+   scene in one segment and include the second composition's opening image as
+   a mid-cut reference (@image2). Avoid this when possible -- prefer splitting
+   at natural pauses. Describe each segment in detail. Note the length of each
+   in seconds. You can see an example here:
+   /Users/markgimein/Desktop/Other_Films/Ashkenazi_Nebula/screenplay/the_ashkenazi_nebula_segments.txt
+
+3. CHARACTER & LOCATION LISTS
+   Create a list of characters with physical descriptions, and a list of
+   locations with descriptions. In film_config.py each character gets TWO
+   descriptions: desc (detailed physical description -- it is what GENERATES
+   the reference images) and video_desc (ONE short essential line used in the
+   video prompts: who they are / their role -- never repeating appearance the
+   reference images already show).
+
+4. VOICE LIST
+   Create a list of characters who speak in more than one segment, with
+   descriptions of their voices, speech patterns, and general temperament.
+   For many films only the main character will speak more than once. These are
+   the characters the voice pipeline will make audio references for (step 12b).
+
+5. PROJECT FOLDER
+   Create a folder for the movie project ON THE DESKTOP, NAMED FOR THE FILM:
+   /Users/markgimein/Desktop/<Film_Name>/
+   with all the standard subfolders (screenplay/, characters/, locations/,
+   stills/, videos/, audio/, backup/, and an extras/ subfolder). The extras/
+   folder is a catch-all the user can use for assets, backups, notes, or the
+   like (the voice pipeline also drops its throwaway voice clips there).
+
+   Then initialize the Film Studio labs IN THE SAME FOLDER (making it a Film
+   Studio project the app can open directly):
+     node ~/Desktop/film_studio/src/tools/sync_pipeline.js ~/Desktop/<Film_Name>
+   Re-run that same command after each generation stage (images, voices,
+   videos, re-rolls, take selections, script revisions) -- it is incremental
+   and keeps the app's labs and timeline current. See the README's
+   "Film Studio integration" section.
+
+6. UPLOAD REFERENCES
+   Upload reference images and audio to Lunostudio's CDN using the
+   upload_images.py template script. This gives publicly accessible URLs
+   that the Seedance API can use. The CDN upload is fast -- a single API
+   call per file using the same Lunostudio API key.
+
+   Template program:
+   /Users/markgimein/Desktop/film_template/upload_images_template.py
+
+7. CHARACTER & LOCATION REFERENCE IMAGES
+   Use OpenAI's ChatGPT Images 2.0 model (gpt-image-2) to generate
+   reference images:
+   - 3 reference images per character (front, three-quarter, full body)
+   - Additional sets for characters with costume changes
+   - Reference images for each location (separate for day/night if needed)
+   - Location images: 1280x720 pixels
+   - Character images: as needed
+
+   You can find template programs and examples in:
+   /Users/markgimein/Desktop/film_template/
+
+   The OpenAI and Lunostudio API keys are in:
+   /Users/markgimein/Desktop/film_template/api_keys.txt
+
+   Save character and location images in the project folder.
+
+8. OPENING STILL IMAGES
+   Create opening images for each segment at 1280x720 resolution.
+   Use character and location reference images for consistency.
+   Make sure images don't have extra white lines at the top and bottom.
+   Test the first image before generating the rest.
+   Submit all remaining API requests together (don't wait for each).
+   Save in the project folder.
+
+   Template program:
+   /Users/markgimein/Desktop/film_template/generate_images_template.py
+
+8b. REVIEW THE SCRIPT FOR GENERATION RISKS
+   Before writing the prompts, read over the segments and flag anything likely
+   to trouble the video generator -- too many characters in one shot, complex
+   physical action, precise prop handling, readable on-screen text, rapid
+   scene changes, crowds where faces matter.
+
+   FLAG; DO NOT SILENTLY REWRITE. The point is to SURFACE these for the user,
+   not to sand the script down on your own. Do NOT quietly cut, simplify, tone
+   down, or rewrite a line/action/image just because it MIGHT confuse Seedance
+   -- that strips the user's creative intent and often removes what makes a
+   shot interesting. Most flags are BORDERLINE (a moderately complex action, a
+   prop, a bit of text): describe the risk, give the trade-off, and let the
+   USER decide -- borderline shots often come out fine, and a re-roll is cheap.
+   Only a severe, near-certain problem warrants strongly recommending a change,
+   and even then you propose rather than impose. Mark which flags you think are
+   serious vs. borderline and ask how the user wants to handle each. (An
+   outright error -- a garbled name, a wrong date -- you clarify with the user,
+   as in step 1.)
+
+9. AUDIO REFERENCES
+   The audio/ folder holds the voice references. You do NOT add them by hand:
+   the voice pipeline (step 12b) writes the list of who needs one and generates
+   each reference from Seedance audio. Just make sure the audio/ folder exists.
+
+10. REVISION PAUSE
+    Pause and ask if there are any revisions. Accept changes and regenerate
+    affected script, characters, locations, or stills as needed.
+    Keep a backup of the earlier version. For a MAJOR revision, also save a
+    timestamped backup of the scripts and prompts to the extras/ folder (e.g.
+    extras/revision_YYYY-MM-DD/): the screenplay/segments, film_config.py, and
+    the generated prompt files (seedance_prompts.txt,
+    seedance_prompts_continuous.txt, audio/voice_ref_prompts.txt).
+
+10b. CONTINUOUS FILMS ONLY -- CONFIRM THE CONTINUATIONS
+    (Skip this step unless the user asked for continuous/chained scenes.)
+    Continuation segments were flagged "continues_previous": True while
+    filling in film_config.py. When you write the prompts in step 12, run the
+    `continuous` form -- python3 make_movie.py prompts continuous -- which
+    validates the flags, PRINTS exactly which segments continue the previous
+    one, and saves that list to continuous_segments.txt. Report that list back
+    to the user so they can confirm which cuts flow together. A continuation
+    should keep the same location (and normally the same characters) as the
+    segment it continues.
+
+11. RESOLUTION CHOICE
+    Ask: 480p, 720p, or 1080p? Default to 480p if no answer.
+
+12. VIDEO GENERATION PROMPTS
+    Create a list of prompts for the Seedance 2 model on Lunostudio.
+    Include descriptions of every shot, links to reference images, links
+    to reference audio. The API processes each prompt independently with
+    no memory of prior segments, so each prompt carries the visual style
+    (stated ONCE, at the top -- there is NO style reminder at the end) and
+    SHORT character descriptions: one essential line per character
+    (video_desc), never repeating appearance the reference images already
+    show.
+
+    WHO SPEAKS TO WHOM: the ACTION text of every speaking segment must state
+    clearly who the speaker is addressing (e.g. "Jane, facing Tom, says:
+    '...'") -- there is no separate dialogue-direction section, and without
+    it Seedance has the character talk to the camera. Make a soliloquy or
+    voice-over explicit in the action too.
+
+    CHARACTER REFERENCES (use 3 only where necessary): always attach the face
+    (front_full_face). Beyond the face, attach a body shot only where it adds
+    something the opening still (@image1) does not already show -- most scenes
+    use just face + head-and-shoulders OR face + full body; all three only where
+    necessary. If the opening still is already a head-and-shoulders or full-body
+    shot, do NOT attach that same framing again. Set this per segment with
+    char_ref_angles in film_config.py (the face is always included; only angles
+    uploaded to GDRIVE_CHAR_REF_IDS are attached).
+
+    NAMES & UNUSUAL WORDS: Handle these in the prompt layer, NOT the
+    screenplay. Where a name or word is easy to mispronounce -- e.g.
+    "Ashkenazi," or the Greek names in A Midsummer Night's Dream -- fill in
+    the PRONUNCIATIONS glossary in film_config.py with a phonetic respelling
+    (CAPS = stressed syllable). make_movie.py then RESPELLS each glossary
+    term phonetically INSIDE the spoken dialogue itself (Seedance voices the
+    literal dialogue text; a side note alone does not fix pronunciation) and
+    appends a short reinforcement note -- only in segments whose dialogue
+    actually speaks the term. Stage directions and character labels keep the
+    real spelling; the screenplay and segment scripts stay plain and
+    correctly spelled.
+
+    Write the prompts with:  python3 make_movie.py prompts
+    For a CONTINUOUS film use:  python3 make_movie.py prompts continuous
+
+    API docs: https://www.lunostudio.ai/developers/seedance-2
+
+    Template program:
+    /Users/markgimein/Desktop/film_template/make_movie_template.py
+
+12b. VOICE REFERENCES (LAST STEP BEFORE MAKING THE MOVIE)
+    Generate the voice references AFTER the prompts and BEFORE generating video.
+    A character needs a voice reference if they SPEAK in more than one segment
+    (every segment is an independent shot that attaches its own audio ref).
+    A character who speaks in only one segment needs no reference.
+
+    Pipeline (Seedance audio -- Mark prefers it to a dedicated TTS API):
+      python3 generate_voices.py list      # who needs one -> audio/audio_references.txt
+      python3 generate_voices.py prompts   # 7s clip prompts -> audio/voice_ref_prompts.txt
+      python3 generate_voices.py generate  # make clips, extract audio
+      # (or: python3 generate_voices.py all)
+
+    The goal is DISTINCT voices -- generic clips make the whole cast sound
+    alike. Each clip is a 7-second in-character video in which the character
+    delivers a 5-7 SECOND SECTION OF THEIR OWN DIALOGUE (about 12-18 words),
+    TYPICAL of how they speak -- NOT a generic "let me say a few words" screen
+    test. The clip is played IN THE CONTEXT OF ITS SCENE: the prompt includes
+    the scene's setting and a short description of the moment the line comes
+    from, never just "a person talking". The prompt also carries the
+    character's FULL physical description and an explicit VOICE description
+    (voice_desc in CHARACTERS) that must ALWAYS state the speaker's ROUGH AGE
+    plus the voice's GENERAL characteristics -- confident, careful, weary...
+    (lasting traits of the person, NEVER scene-specific moods like "worried").
+    It uses ONLY that character's frontal face shot as the single image
+    reference. The passage is pulled automatically from the character's
+    dialogue in SEGMENTS; override it per character with "voice_ref_line" in
+    CHARACTERS (also a real, typical passage from the piece). `list` and
+    `prompts` flag a voice_desc that is missing or lacks an age -- fix those
+    BEFORE generating. The clips are ALWAYS made at 480p -- we keep only the
+    audio, so higher resolution would be wasted. The throwaway video is saved
+    to extras/; ONLY the audio is exported (as before) to
+    audio/<char>_voice_reference.mp3 as the reference.
+
+    Then host the audio and wire it up:
+      python3 upload_images.py audio
+    and paste the returned URLs into VOICE_REFS in film_config.py.
+
+    Template program:
+    /Users/markgimein/Desktop/film_template/generate_voices_template.py
+
+13. GENERATE VIDEOS
+    Before starting, get the user's final OK and double-check the film
+    LENGTH (total duration / number of segments) and RESOLUTION
+    (SEEDANCE_RESOLUTION: 480p, 720p, or 1080p) -- generation is the slow,
+    costly step. Then generate the WHOLE movie at once (no need to test the
+    first segment first):
+      python3 make_movie.py generate
+    ALL segments are submitted IN PARALLEL (throttled for the rate limit) and
+    polled together -- never generate segments one at a time waiting for each.
+    The same applies to any manual regeneration batch. Save generated segments
+    in the project folder, then sync them into Film Studio:
+      node ~/Desktop/film_studio/src/tools/sync_pipeline.js <project>
+
+    CONTINUOUS VERSION (only if the user asked for continuous scenes): append
+    the word `continuous` to operate on the continuous version, which uses
+    separate files and never overwrites the standard cut:
+      python3 make_movie.py generate continuous
+    Continuity is carried by locked shared frames (or build the chain with
+    chain_regen.py -- forward frame-chaining, the preferred method; chains are
+    the one legitimately sequential case). See the README.
+    Stitch it with:  python3 make_movie.py stitch continuous
+
+    PROVIDER + FALLBACK: Segments generate on Lunostudio Seedance 2 by
+    default. Any segment that fails twice on Lunostudio is AUTOMATICALLY
+    re-routed to Nano-GPT (same Seedance 2 model family, different host) -- no
+    manual step. If the user instead wants the whole film to go through
+    Nano-GPT from the start, set VIDEO_PROVIDER = "nanogpt" in film_config.py.
+    (OpenRouter is a legacy alternate: VIDEO_PROVIDER = "openrouter".)
+    `make_movie.py status` shows which provider produced each segment.
+
+14. GENERATION REPORT
+    Report on all segments: which succeeded, which failed.
+    Ask about adapting, regenerating, or changing failed segments.
+
+15. HANDLE FAILED GENERATIONS
+    A segment is only "failed" after it failed twice on Lunostudio AND
+    failed on Nano-GPT. For anything still failed, create a
+    failed_segments/ folder in the project directory with everything
+    needed for manual regeneration:
+
+    a) Write failed_segments/report.txt containing the complete Seedance
+       API prompt for each failed segment, including all parameters
+       (model, duration, resolution, aspect ratio, mode) and the full
+       prompt text.
+    b) Download all referenced assets into failed_segments/ -- opening
+       stills, character reference images, and audio references used by
+       the failed prompts. Name them clearly (e.g., seg06_opening.jpg,
+       seg06_lysander_ref.jpg, seg06_audio_ref.mp3).
+    c) List the reference URLs in the report so they can be pasted
+       directly into another service's UI.
+
+    This makes it easy for the user to regenerate those segments manually
+    through a different provider or the Lunostudio web interface.
+
+    You can generate this automatically with:
+      python3 make_movie.py failures
+
+16. RENUMBER THE SEGMENTS (BEFORE STITCHING)
+    Segment ids drift out of clean order over a project (cut segments leave
+    gaps; inserted shots get out-of-place or 3-digit ids). BEFORE stitching,
+    renumber to a clean 1..N in film order:
+      python3 make_movie.py renumber             (or: renumber continuous)
+    This renumbers in LIST (film) order -- continuation joins are unaffected --
+    and keeps everything in sync: it renames the video + still files, remaps the
+    JSON sidecars, and rewrites the ids in film_config.py (backup in backup/).
+    It is idempotent (a no-op if already 1..N). Do it BEFORE the first Film
+    Studio sync (the sync ledger is keyed by filename). Regenerate the
+    prompts/segment
+    list afterward if you need them to show the new numbers.
+
+17. FINAL ASSEMBLY
+    When all segments are ready (and renumbered, step 16), ask the user whether
+    they should be stitched into one video file. Do not stitch until the user
+    confirms. Keep the original segment files.
+
+18. SEGMENT LIST & REGENERATION REVIEW
+    When the film is done, write a numbered list of all segments to the
+    screenplay folder (next to screenplay.txt / segments.txt):
+      python3 make_movie.py list             (or: list continuous)
+    `stitch` runs this automatically on success, saving
+    screenplay/segment_list.txt (or segment_list_continuous.txt) with each
+    segment's number, title, duration, characters, description, and status.
+    Then ASK the user whether any segments should be regenerated. To
+    regenerate one, delete its file from videos/ (or videos_continuous/) and
+    re-run `make_movie.py generate` (append `continuous` for the continuous
+    version) -- generation skips segments already on disk and recreates only
+    the deleted ones.
+
+----------------------------------------------------------------------
+ONE TEMPLATE; STANDARD BY DEFAULT, CHAINED ONLY ON REQUEST
+
+There is ONE set of templates (film_config_template.py,
+generate_images_template.py, generate_voices_template.py,
+make_movie_template.py, chain_regen_template.py). Every film is STANDARD --
+short, self-contained shots, each generated independently from its own
+opening still, all submitted in parallel -- unless the user EXPLICITLY asks
+for continuous scenes or chained segments.
+
+  CONTINUOUS (only on request): shots flow into one another without a cut.
+  The preferred method is FORWARD FRAME-CHAINING (chain_regen.py): each
+  chained shot opens on the previous shot's extracted last frame; a chain is
+  the one legitimately sequential generation. The alternative is locked shared
+  frames ("continues_previous": True + the `continuous` commands). Details and
+  the comparison table are in the README.
+
+If the user gives their own specific video-creation rules in the prompt, those
+OVERRIDE the defaults here. Where this prompt and the README disagree, the
+README wins.
+
+----------------------------------------------------------------------
+IMPORTANT NOTES:
+- Always use gpt-image-2 (ChatGPT Images 2.0) for image generation
+- Always use seedance-2 for video generation (Lunostudio, with Nano-GPT as
+  the automatic backup; OpenRouter is a legacy alternate)
+- A segment that fails twice on Lunostudio auto-routes to Nano-GPT;
+  set VIDEO_PROVIDER = "nanogpt" to use Nano-GPT from the start
+- Every film is STANDARD unless the user explicitly asks for continuous or
+  chained scenes; never chain on your own initiative. Segments may be short
+  (no preference for longer), may contain multiple shots (e.g. a cut to a
+  closeup, described in the prompt), and each has its own opening image
+- GENERATE IN PARALLEL, ALWAYS: submit all image and video requests together
+  and poll them together; never one at a time. (A frame chain, used only on
+  request, is the one sequential exception)
+- PACING: scenes must not drag. Budget dialogue at ~2.5 words/second when
+  setting segment durations; every prompt carries the automatic PACING rule
+  (brisk delivery, no dead air)
+- The project folder goes ON THE DESKTOP, named for the film
+  (~/Desktop/<Film_Name>/), and doubles as a Film Studio project. Run
+  node ~/Desktop/film_studio/src/tools/sync_pipeline.js <project>
+  after each generation stage to keep the app's labs and timeline current --
+  it also refreshes browse/ (Finder-friendly hard-link views: browse/film =
+  the current cut, browse/stills = chosen stills, browse/newest = whatever
+  the last batch generated)
+- Voice references: a 5-7s section of the character's own dialogue, typical of
+  them, played in its scene's context; voice_desc must give rough age + general
+  characteristics (never scene moods). Distinct voices are the point
+- If the user gives their own specific video-creation rules in the prompt,
+  those OVERRIDE the defaults in this workflow and the README; where this
+  workflow or the filmmaking skill disagrees with the README, the README wins
+- Generate voice references as the LAST step before making the movie
+  (generate_voices.py): needed for any character who speaks in more than one
+  segment. Clips are ALWAYS 480p (audio only is kept); the throwaway video
+  goes to extras/, the audio to audio/
+- Every project has an extras/ folder for assets, backups, notes, and the like
+- Reference images must be publicly accessible URLs (Lunostudio CDN)
+- In video prompts, reproduce names and unusual words exactly; add
+  pronunciations via the PRONUNCIATIONS glossary in film_config.py
+- If the user's initial description has a likely mistake or misspelling,
+  clarify it before generating
+- Keep backups before making revisions; on a MAJOR revision also save a
+  timestamped backup of the scripts and prompts to the extras/ folder
+- If segments fail repeatedly, create a failed_segments/ folder with
+  the full prompts and all referenced assets for manual regeneration
+- No need to test the first video -- generate the whole movie at once,
+  but double-check length and resolution with the user first
+- State the visual style once at the top of every prompt (each prompt is
+  processed independently); no style reminder at the end. Character
+  descriptions in video prompts are short and essential-only (video_desc) --
+  the reference images carry the appearance. The action text states who is
+  speaking to whom
+- The API keys are in /Users/markgimein/Desktop/film_template/api_keys.txt

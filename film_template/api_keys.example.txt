@@ -1,0 +1,15 @@
+API KEYS
+
+# Copy this file to `api_keys.txt` in the same folder and fill in your own keys.
+# `api_keys.txt` is git-ignored so your real keys never get committed.
+# The scripts scan this file for the key patterns shown below.
+
+OpenAI API key: sk-proj-YOUR_OPENAI_KEY_HERE
+
+Lunostudio API key: luno_sk_YOUR_LUNOSTUDIO_KEY_HERE
+
+OpenRouter API key
+sk-or-v1-YOUR_OPENROUTER_KEY_HERE
+
+Nano-gpt API key
+sk-nano-YOUR_NANOGPT_KEY_HERE
