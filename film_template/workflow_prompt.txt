@@ -56,7 +56,7 @@ I need to create an AI-generated short film. Here is the workflow:
    a mid-cut reference (@image2). Avoid this when possible -- prefer splitting
    at natural pauses. Describe each segment in detail. Note the length of each
    in seconds. You can see an example here:
-   /Users/markgimein/Desktop/Other_Films/Ashkenazi_Nebula/screenplay/the_ashkenazi_nebula_segments.txt
+   ~/Desktop/Other_Films/Ashkenazi_Nebula/screenplay/the_ashkenazi_nebula_segments.txt
 
 3. CHARACTER & LOCATION LISTS
    Create a list of characters with physical descriptions, and a list of
@@ -74,7 +74,7 @@ I need to create an AI-generated short film. Here is the workflow:
 
 5. PROJECT FOLDER
    Create a folder for the movie project ON THE DESKTOP, NAMED FOR THE FILM:
-   /Users/markgimein/Desktop/<Film_Name>/
+   ~/Desktop/<Film_Name>/
    with all the standard subfolders (screenplay/, characters/, locations/,
    stills/, videos/, audio/, backup/, and an extras/ subfolder). The extras/
    folder is a catch-all the user can use for assets, backups, notes, or the
@@ -95,7 +95,7 @@ I need to create an AI-generated short film. Here is the workflow:
    call per file using the same Lunostudio API key.
 
    Template program:
-   /Users/markgimein/Desktop/film_template/upload_images_template.py
+   ~/Desktop/film_template/upload_images_template.py
 
 7. CHARACTER & LOCATION REFERENCE IMAGES
    Use OpenAI's ChatGPT Images 2.0 model (gpt-image-2) to generate
@@ -107,10 +107,10 @@ I need to create an AI-generated short film. Here is the workflow:
    - Character images: as needed
 
    You can find template programs and examples in:
-   /Users/markgimein/Desktop/film_template/
+   ~/Desktop/film_template/
 
    The OpenAI and Lunostudio API keys are in:
-   /Users/markgimein/Desktop/film_template/api_keys.txt
+   ~/Desktop/film_template/api_keys.txt
 
    Save character and location images in the project folder.
 
@@ -123,7 +123,7 @@ I need to create an AI-generated short film. Here is the workflow:
    Save in the project folder.
 
    Template program:
-   /Users/markgimein/Desktop/film_template/generate_images_template.py
+   ~/Desktop/film_template/generate_images_template.py
 
 8b. REVIEW THE SCRIPT FOR GENERATION RISKS
    Before writing the prompts, read over the segments and flag anything likely
@@ -215,7 +215,7 @@ I need to create an AI-generated short film. Here is the workflow:
     API docs: https://www.lunostudio.ai/developers/seedance-2
 
     Template program:
-    /Users/markgimein/Desktop/film_template/make_movie_template.py
+    ~/Desktop/film_template/make_movie_template.py
 
 12b. VOICE REFERENCES (LAST STEP BEFORE MAKING THE MOVIE)
     Generate the voice references AFTER the prompts and BEFORE generating video.
@@ -255,7 +255,7 @@ I need to create an AI-generated short film. Here is the workflow:
     and paste the returned URLs into VOICE_REFS in film_config.py.
 
     Template program:
-    /Users/markgimein/Desktop/film_template/generate_voices_template.py
+    ~/Desktop/film_template/generate_voices_template.py
 
 13. GENERATE VIDEOS
     Before starting, get the user's final OK and double-check the film
@@ -417,4 +417,4 @@ IMPORTANT NOTES:
   descriptions in video prompts are short and essential-only (video_desc) --
   the reference images carry the appearance. The action text states who is
   speaking to whom
-- The API keys are in /Users/markgimein/Desktop/film_template/api_keys.txt
+- The API keys are in ~/Desktop/film_template/api_keys.txt

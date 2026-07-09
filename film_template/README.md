@@ -1492,11 +1492,11 @@ the litterbox upload that stages local files for Nano-GPT.
 
 Reference implementations from completed films:
 
-- **The Ashkenazi Nebula** (v1): `/Users/markgimein/Desktop/Other_Films/Ashkenazi_Nebula/`
+- **The Ashkenazi Nebula** (v1): `~/Desktop/Other_Films/Ashkenazi_Nebula/`
   - `generate_images.py` -- original image generation script
   - `screenplay/the_ashkenazi_nebula_segments.txt` -- segment breakdown example
 
-- **The Ashkenazi Nebula** (v2): `/Users/markgimein/Desktop/Other_Films/Ashkenazi_Nebula_v2/`
+- **The Ashkenazi Nebula** (v2): `~/Desktop/Other_Films/Ashkenazi_Nebula_v2/`
   - `make_movie.py` -- original video generation script
   - `seedance_prompts.txt` -- full prompt list example
   - `characters/` -- character reference image examples

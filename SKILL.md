@@ -13,13 +13,13 @@ at hand always override both this skill and the README.
 
 ## Before Starting Any Film Project
 
-1. **Read the full README** at `/Users/markgimein/Desktop/film_template/README.md` — it contains the complete pipeline, API reference, prompt structure, and all workflow rules.
-2. **Read the API keys** from `/Users/markgimein/Desktop/film_template/api_keys.txt`
-3. **Review the template files** in `/Users/markgimein/Desktop/film_template/`
+1. **Read the full README** at `~/Desktop/film_template/README.md` — it contains the complete pipeline, API reference, prompt structure, and all workflow rules.
+2. **Read the API keys** from `~/Desktop/film_template/api_keys.txt`
+3. **Review the template files** in `~/Desktop/film_template/`
 
 ## Template Location
 
-All templates live in `/Users/markgimein/Desktop/film_template/`:
+All templates live in `~/Desktop/film_template/`:
 
 | File | Purpose |
 |------|---------|
@@ -193,7 +193,7 @@ select it.
 When the user wants to **edit or assemble an existing, already-generated film** in
 Palmier Pro (rather than make a new one), the finished segments are already on
 disk in the project folder — nothing needs to be regenerated. Example project:
-`/Users/markgimein/Desktop/Other_Films/Midsummer_Madness`.
+`~/Desktop/Other_Films/Midsummer_Madness`.
 
 **1. Find the segments.** A completed project keeps each shot as its own file,
 plus versioned re-rolls:
@@ -237,5 +237,5 @@ renumber` *before* importing, never after.)
 
 ## Previous Films (Reference Implementations)
 
-- **The Ashkenazi Nebula v1:** `/Users/markgimein/Desktop/Other_Films/Ashkenazi_Nebula/`
-- **The Ashkenazi Nebula v2:** `/Users/markgimein/Desktop/Other_Films/Ashkenazi_Nebula_v2/`
+- **The Ashkenazi Nebula v1:** `~/Desktop/Other_Films/Ashkenazi_Nebula/`
+- **The Ashkenazi Nebula v2:** `~/Desktop/Other_Films/Ashkenazi_Nebula_v2/`

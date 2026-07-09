@@ -85,6 +85,6 @@ node /path/to/film_studio/src/tools/sync_pipeline.js /path/to/<Film_Name>
 
 ## A note on the paths in these files
 
-The templates and skill were written for the author's own machine and contain
-absolute paths like `/Users/markgimein/Desktop/film_template/...`. Adjust them to
-wherever you keep your copy.
+The templates and skill assume a particular layout (e.g.
+`~/Desktop/film_template/...` for the pipeline and `~/Desktop/<Film_Name>/` for a
+film project). Adjust them to wherever you keep your copy.
