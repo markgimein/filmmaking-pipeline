@@ -342,22 +342,54 @@ def name_note(seg):
 def validate_continuations():
     """Inspect every segment flagged continues_previous. Returns (joins, problems)
     where joins is a list of (continuation_id, previous_id) pairs and problems is
-    a list of (seg_id, reason) for continuations that look incoherent (the first
-    segment, or a location change that would make the shared frame jump). These
-    are warnings only -- the segment still generates as a normal shot."""
+    a list of (seg_id, reason) for continuations that look incoherent or that
+    break the continuous-take limits (standing rules, 2026-07-16):
+
+      * a take is at most THREE segments long INCLUDING the initial one --
+        chained quality deteriorates too much beyond that;
+      * usually keep a take to TWO segments; three only when the scene truly
+        cannot break;
+      * HARD RULE: a continuation may not introduce any character who is not in
+        the take's INITIAL segment (every continuation's cast must be a subset
+        of the initial segment's cast) -- a new character needs a new base
+        segment.
+
+    These are printed as warnings before prompts/generation -- fix the config
+    rather than generating through a HARD RULE violation."""
     joins, problems = [], []
+    run_base, run_len = None, 0   # current take: initial segment + running length
     for i, seg in enumerate(SEGMENTS):
         if not seg.get("continues_previous"):
+            run_base, run_len = seg, 1
             continue
         if i == 0:
             problems.append((seg["id"], "first segment cannot continue a previous one"))
+            run_base, run_len = seg, 1
             continue
         prev = SEGMENTS[i - 1]
+        run_len += 1
+        base = run_base or prev
         if (seg.get("location") != prev.get("location")
                 or seg.get("location_variant") != prev.get("location_variant")):
             problems.append((seg["id"],
                              f"location changes from segment {prev['id']} -- the shared "
                              f"frame may not be coherent"))
+        extra = [c for c in seg.get("characters", [])
+                 if c not in base.get("characters", [])]
+        if extra:
+            problems.append((seg["id"],
+                             f"HARD RULE: introduces {', '.join(extra)} not in the take's "
+                             f"initial segment {base['id']} -- a continuation's cast must "
+                             f"be a subset of the initial segment's cast; give the new "
+                             f"character a new base segment"))
+        if run_len > 3:
+            problems.append((seg["id"],
+                             f"take runs {run_len} segments (max 3 including the initial; "
+                             f"usually 2) -- chained quality deteriorates; split the take"))
+        elif run_len == 3:
+            problems.append((seg["id"],
+                             "take reaches 3 segments -- that is the maximum (usually keep "
+                             "to 2); acceptable only if the scene truly cannot break"))
         joins.append((seg["id"], prev["id"]))
     return joins, problems
 
@@ -540,11 +572,14 @@ def build_prompt(seg):
     if seg["characters"]:
         char_lines = ["CHARACTERS (match reference images exactly):"]
         angle_map = seg.get("char_ref_angles", {})
+        variant_map = seg.get("char_ref_variant", {})
         for key in seg["characters"]:
             c = CHARACTERS[key]
             tags = []
             for angle in char_ref_angles_for(key, angle_map):
-                gkey = f"{key}_{angle}"
+                variant = variant_map.get(key)
+                vkey = f"{key}_{variant}_{angle}" if variant else None
+                gkey = vkey if vkey and vkey in GDRIVE_CHAR_REF_IDS else f"{key}_{angle}"
                 if gkey in GDRIVE_CHAR_REF_IDS:
                     refs.append(gdrive(GDRIVE_CHAR_REF_IDS[gkey]))
                     tags.append(f"@image{n}")
@@ -683,9 +718,12 @@ def openrouter_spec(seg, first_frame_url=None, video_url=None):
     image_refs = []
     if not last_frame_url:
         angle_map = seg.get("char_ref_angles", {})
+        variant_map = seg.get("char_ref_variant", {})
         for key in seg["characters"]:
             for angle in char_ref_angles_for(key, angle_map):
-                gkey = f"{key}_{angle}"
+                variant = variant_map.get(key)
+                vkey = f"{key}_{variant}_{angle}" if variant else None
+                gkey = vkey if vkey and vkey in GDRIVE_CHAR_REF_IDS else f"{key}_{angle}"
                 if gkey in GDRIVE_CHAR_REF_IDS:
                     image_refs.append(gdrive(GDRIVE_CHAR_REF_IDS[gkey]))
         mid_cut = seg.get("mid_cut_ref")

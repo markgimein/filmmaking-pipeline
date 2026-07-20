@@ -16,14 +16,25 @@ I need to create an AI-generated short film. Here is the workflow:
    inconsistent spelling -- ask the user to clarify it BEFORE generating
    anything. Spell every name consistently throughout the screenplay.
 
-1b. STANDARD BY DEFAULT; CHAINED SEGMENTS ONLY ON REQUEST
+1b. STANDARD BY DEFAULT; CHAINED SEGMENTS ONLY WITH THE USER'S SIGN-OFF
    Every film is a STANDARD film -- independent shots, each with its own
-   opening image -- UNLESS the user explicitly asks for continuous scenes or
-   chained segments. Do not use chaining on your own initiative, and there is
-   no need to ask about it up front. If the user does ask, the preferred
-   method is FORWARD FRAME-CHAINING (chain_regen.py; see the README's
-   "Forward frame-chaining" section): each chained shot opens on the previous
-   shot's extracted last frame.
+   opening image -- UNLESS the user asks for continuous scenes or chained
+   segments, OR you propose them and the user approves. Continuous treatment
+   may be suggested somewhat more freely, especially where a dialogue scene's
+   segment breaks would risk continuity -- but ALWAYS flag the plan before
+   generating clips; never generate chained/continuous segments on your own
+   initiative. The preferred method is FORWARD FRAME-CHAINING
+   (chain_regen.py; see the README's "Forward frame-chaining" section): each
+   chained shot opens on the previous shot's extracted last frame.
+
+   CHAIN LIMITS (apply to every continuous technique; enforced by
+   chain_regen.py and the continuation validator):
+   * max THREE segments per chain/take INCLUDING the initial one -- the
+     quality deteriorates too much beyond that
+   * usually TWO; go to three only when the scene truly cannot break
+   * HARD RULE: no characters in the chained (2nd/3rd) segments who are not
+     in the initial segment -- a new character always gets a new base segment.
+   Build longer scenes as several short chains, each from a fresh base segment.
 
    IMPORTANT: If the user gives their own specific rules for video creation in
    the prompt, those rules OVERRIDE the defaults below (and in the README).
@@ -35,11 +46,16 @@ I need to create an AI-generated short film. Here is the workflow:
    - Each segment must be between 4 and 15 seconds -- no shorter, no longer.
      There is NO preference for longer segments: use the length the action
      naturally needs; shorter segments are fine.
-   - PACING: budget dialogue at about 2.5 WORDS PER SECOND when setting each
-     segment's duration, plus only the action time actually needed. Do not pad
-     the seconds -- the model fills whatever time it is given, so a generous
-     duration IS a slow scene. (Every video prompt also carries an automatic
-     PACING rule pushing brisk delivery with no dead air.)
+   - PACING: budget dialogue at about 2.7 WORDS PER SECOND when setting each
+     segment's duration -- that rate is for the words themselves only. On top
+     of it, budget only the beat/pause/action time actually needed (~1.5-2s
+     for a plain talking-head shot; more for staged action or a held pause; a
+     little faster than 2.7 for emotionally charged scenes, slower for weighty
+     or verse lines). Do not pad the seconds -- the model fills whatever time
+     it is given, so a generous duration IS a slow scene. (There is NO injected
+     PACING rule in the prompts -- pacing comes entirely from the seconds
+     budget and the ordering of the action text. See the README's Pacing
+     section.)
    - A segment MAY contain multiple shots -- it can cut within itself (e.g. to
      a closeup), with the internal cut described in the video prompt. Don't
      split a segment just because the shot changes; split where the scene
@@ -47,9 +63,20 @@ I need to create an AI-generated short film. Here is the workflow:
    - Every segment begins with an opening image. (Chained segments, which open
      on the previous shot's extracted last frame instead, are used only when
      the user asked for continuous scenes.)
-   - No more than one person speaks per segment, and no conversation stretches
-     over more than two segments (conversations are very short BY DESIGN;
-     voice-overs/narration are not conversations and can run long).
+   - No more than TWO people speak per segment. A two-person exchange may
+     share one segment: set voice_audios (each speaker gets their own @audioN)
+     and make the action text attribute EVERY line to its named speaker. No
+     conversation stretches over more than two segments (conversations are
+     very short BY DESIGN; voice-overs/narration are not conversations and
+     can run long).
+   - In DIALOGUE scenes, avoid segment breaks that would create continuity
+     problems: one 15s segment is usually preferable to two 8s ones. The most
+     frequent continuity failure is characters changing relative positions
+     from one segment to the next mid-conversation -- fewer segment switches
+     avoid it. A two-speaker segment (voice_audios) usually keeps the
+     exchange in one shot; where it genuinely won't fit, a proposed
+     continuous treatment (flagged before generating clips) beats a
+     continuity-breaking cut.
 
    If a voiceover or dialogue would be badly interrupted by a cut, keep the
    scene in one segment and include the second composition's opening image as
@@ -166,8 +193,11 @@ I need to create an AI-generated short film. Here is the workflow:
     validates the flags, PRINTS exactly which segments continue the previous
     one, and saves that list to continuous_segments.txt. Report that list back
     to the user so they can confirm which cuts flow together. A continuation
-    should keep the same location (and normally the same characters) as the
-    segment it continues.
+    must keep the same location and obey the CHAIN LIMITS from step 1b (max
+    three segments per take including the initial, usually two; NO characters
+    in a continuation who are not in the take's initial segment -- hard rule).
+    The validator prints any violation in the continuation report: fix the
+    config rather than generate through it.
 
 11. RESOLUTION CHOICE
     Ask: 480p, 720p, or 1080p? Default to 480p if no answer.
@@ -186,7 +216,11 @@ I need to create an AI-generated short film. Here is the workflow:
     clearly who the speaker is addressing (e.g. "Jane, facing Tom, says:
     '...'") -- there is no separate dialogue-direction section, and without
     it Seedance has the character talk to the camera. Make a soliloquy or
-    voice-over explicit in the action too.
+    voice-over explicit in the action too. In a TWO-SPEAKER segment,
+    attribute EVERY line to its named speaker ("Jane says: '...' Tom
+    replies: '...'") -- an unattributed line may be voiced by the wrong
+    character -- and set voice_audios so each speaker is tied to their own
+    @audioN.
 
     CHARACTER REFERENCES (use 3 only where necessary): always attach the face
     (front_full_face). Beyond the face, attach a body shot only where it adds
@@ -201,7 +235,9 @@ I need to create an AI-generated short film. Here is the workflow:
     screenplay. Where a name or word is easy to mispronounce -- e.g.
     "Ashkenazi," or the Greek names in A Midsummer Night's Dream -- fill in
     the PRONUNCIATIONS glossary in film_config.py with a phonetic respelling
-    (CAPS = stressed syllable). make_movie.py then RESPELLS each glossary
+    (CAPS = stressed syllable). WHEN IN DOUBT, INCLUDE THE RESPELLING -- an
+    unneeded glossary entry costs nothing; a mangled name costs a
+    regeneration. make_movie.py RESPELLS each glossary
     term phonetically INSIDE the spoken dialogue itself (Seedance voices the
     literal dialogue text; a side note alone does not fix pronunciation) and
     appends a short reinforcement note -- only in segments whose dialogue
@@ -231,7 +267,7 @@ I need to create an AI-generated short film. Here is the workflow:
 
     The goal is DISTINCT voices -- generic clips make the whole cast sound
     alike. Each clip is a 7-second in-character video in which the character
-    delivers a 5-7 SECOND SECTION OF THEIR OWN DIALOGUE (about 12-18 words),
+    delivers a 5-7 SECOND SECTION OF THEIR OWN DIALOGUE (about 13-18 words),
     TYPICAL of how they speak -- NOT a generic "let me say a few words" screen
     test. The clip is played IN THE CONTEXT OF ITS SCENE: the prompt includes
     the scene's setting and a short description of the moment the line comes
@@ -261,7 +297,13 @@ I need to create an AI-generated short film. Here is the workflow:
     Before starting, get the user's final OK and double-check the film
     LENGTH (total duration / number of segments) and RESOLUTION
     (SEEDANCE_RESOLUTION: 480p, 720p, or 1080p) -- generation is the slow,
-    costly step. Then generate the WHOLE movie at once (no need to test the
+    costly step. As part of the same check, do a NAMES PREFLIGHT: sweep the
+    dialogue for any name or proper noun the model could stumble on (foreign,
+    archaic, invented, ambiguously spelled -- including ones not yet in
+    PRONUNCIATIONS), flag them to the user, and PROPOSE a solution for each
+    (usually a phonetic respelling to add to the glossary; occasionally
+    rephrasing the line or a short test clip for the worst offender). Then
+    generate the WHOLE movie at once (no need to test the
     first segment first):
       python3 make_movie.py generate
     ALL segments are submitted IN PARALLEL (throttled for the rate limit) and
@@ -373,16 +415,22 @@ IMPORTANT NOTES:
   the automatic backup; OpenRouter is a legacy alternate)
 - A segment that fails twice on Lunostudio auto-routes to Nano-GPT;
   set VIDEO_PROVIDER = "nanogpt" to use Nano-GPT from the start
-- Every film is STANDARD unless the user explicitly asks for continuous or
-  chained scenes; never chain on your own initiative. Segments may be short
+- Every film is STANDARD unless the user asks for continuous or chained
+  scenes, or approves your flagged proposal for them -- never generate
+  chained/continuous clips without the user's sign-off. Segments may be short
   (no preference for longer), may contain multiple shots (e.g. a cut to a
-  closeup, described in the prompt), and each has its own opening image
+  closeup, described in the prompt), and each has its own opening image. In
+  dialogue scenes, though, avoid continuity-breaking segment switches: one
+  15s segment beats two 8s ones (characters changing relative positions
+  between segments is the classic failure)
 - GENERATE IN PARALLEL, ALWAYS: submit all image and video requests together
   and poll them together; never one at a time. (A frame chain, used only on
   request, is the one sequential exception)
-- PACING: scenes must not drag. Budget dialogue at ~2.5 words/second when
-  setting segment durations; every prompt carries the automatic PACING rule
-  (brisk delivery, no dead air)
+- PACING: scenes must not drag. Budget dialogue at ~2.7 words/second (the
+  words themselves) plus the beat/pause/action time actually needed when
+  setting segment durations; words should fill ~60-75% of the runtime. No
+  PACING rule is injected into prompts -- the seconds budget and the action
+  text's ordering do the pacing
 - The project folder goes ON THE DESKTOP, named for the film
   (~/Desktop/<Film_Name>/), and doubles as a Film Studio project. Run
   node ~/Desktop/film_studio/src/tools/sync_pipeline.js <project>
@@ -403,7 +451,9 @@ IMPORTANT NOTES:
 - Every project has an extras/ folder for assets, backups, notes, and the like
 - Reference images must be publicly accessible URLs (Lunostudio CDN)
 - In video prompts, reproduce names and unusual words exactly; add
-  pronunciations via the PRONUNCIATIONS glossary in film_config.py
+  pronunciations via the PRONUNCIATIONS glossary in film_config.py (when in
+  doubt, include a respelling). Before generating videos, flag any risky
+  names/proper nouns to the user with a proposed fix for each
 - If the user's initial description has a likely mistake or misspelling,
   clarify it before generating
 - Keep backups before making revisions; on a MAJOR revision also save a

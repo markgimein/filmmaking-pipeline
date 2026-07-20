@@ -14,18 +14,28 @@ Why this is preferred over the locked first-and-last-frame ("keyframe") joins:
   - Each shot keeps its CHARACTER reference images (keyframe mode forbids them).
   - The seam is the previous shot's ACTUAL last frame, so it always matches --
     no provider has to "honor" a locked end frame, nothing drifts or mirror-flips.
-  - It runs on the normal generator: **Lunostudio is primary**; if a shot fails
-    or returns nothing within LUNO_TIMEOUT_MIN minutes, it falls back to
-    **Nano-GPT** (doubao-seedance-2-0). Same provider policy as the rest of the film.
+  - Provider: **Nano-GPT (doubao-seedance-2-0) is PRIMARY for chained shots** --
+    its `imageUrl` is true image-to-video conditioning that pins the first frame
+    pixel-exactly (verified on The Examined Life, 2026-07-11: corr 0.998, zero
+    shift). Lunostudio does NOT pin an opening frame in any mode -- reference
+    mode re-frames it ~2-8%, and even single-image i2v drifts ~2% (corr 0.85) --
+    so Luno is fallback only. Override with CHAIN_PROVIDER=luno_i2v|lunostudio.
   The tradeoff: a chain is SEQUENTIAL (each shot needs the previous shot's output),
   whereas locked-frame joins generate in parallel. For continuous dialogue/action
   the exact, drift-free seam is worth the sequential cost.
 
-Output goes into the continuous videos folder (videos_continuous/) as a NEW
-versioned take (seg<NN>_v<N>.mp4) -- the original seg<NN>.mp4 and every prior
-take are kept, nothing is overwritten, and no file name is reused. The film is
-unchanged: the manifest is NOT touched. Review the take, then select it with
-`make_movie.py use <id> <version> continuous`.
+Output goes into the cut's videos folder -- videos_continuous/ by default, or
+videos/ with CHAIN_CUT=standard (a standard film chaining at generation time) --
+as a NEW versioned take (seg<NN>_v<N>.mp4). The original seg<NN>.mp4 and every
+prior take are kept, nothing is overwritten, and no file name is reused. The
+film is unchanged: the manifest is NOT touched. Review the take, then select it
+with `make_movie.py use <id> <version> [continuous]`.
+
+Chain limits (standing rules, enforced below):
+  * max THREE segments per chain INCLUDING the initial one (quality deteriorates)
+  * usually TWO -- go to three only when the scene truly cannot break
+  * HARD RULE: no characters in the 2nd/3rd chained segments who are not in the
+    initial segment (each chained cast must be a subset of the initial cast)
 
 Usage:
   python3 chain_regen.py regen <id> still                 # open from the config still
@@ -40,6 +50,7 @@ Optional per-run env (comma-separated segment ids):
 """
 import json
 import os
+import re
 import ssl
 import subprocess
 import sys
@@ -52,7 +63,11 @@ import certifi
 
 import make_movie as mm
 
-mm.CONTINUOUS = True  # continuous cut: write into videos_continuous/, add CONTINUE_RULE
+# Which cut the chained takes belong to: "continuous" (default) writes new takes
+# into videos_continuous/. Set CHAIN_CUT=standard for a standard film that chains
+# at generation time (no continues_previous flags, e.g. The Examined Life) --
+# takes then version in place in videos/.
+mm.CONTINUOUS = os.environ.get("CHAIN_CUT", "continuous").strip().lower() != "standard"
 
 HERE = Path(__file__).parent
 # Re-rolled takes land in the continuous videos folder as versioned files
@@ -60,8 +75,26 @@ HERE = Path(__file__).parent
 WORK = HERE / "chain_frames"
 WORK.mkdir(exist_ok=True)
 
-LUNO_TIMEOUT_MIN = 10   # primary: Lunostudio for this long, then fall back to Nano-GPT
+LUNO_TIMEOUT_MIN = 10
 NANO_TIMEOUT_MIN = 40
+
+# Provider order for chained shots:
+#   "nanogpt"     -- Nano-GPT i2v first (imageUrl pins the actual first frame)
+#   "luno_i2v"    -- Lunostudio single-image image-to-video: the opening frame is
+#                    the ONLY reference image. Per Luno's Seedance 2 docs,
+#                    "Single image = image-to-video. Multiple = reference mode" --
+#                    so char refs are dropped (a 2nd image unlocks the first frame).
+#   "lunostudio"  -- legacy reference-mode route (opening + char refs as @imageN);
+#                    does NOT pin the first frame, seams drift ~2-8%.
+CHAIN_PROVIDER = os.environ.get("CHAIN_PROVIDER", "nanogpt").strip().lower()
+
+# Continuity instruction prepended to every chained shot's prompt.
+CHAIN_CONTINUITY_NOTE = (
+    "CONTINUITY: the start image is the exact last frame of the previous "
+    "shot. The video begins on it unchanged -- same framing, zoom, and "
+    "character positions -- and carries the action straight on; do not "
+    "recompose, reframe, or cut away from it."
+)
 
 # Segment ids that also attach their location reference still as an extra @imageN.
 # Override per-run with CHAIN_LOCREF, e.g. CHAIN_LOCREF=3,4,5
@@ -154,6 +187,53 @@ def seg_by_id(sid):
     return next(s for s in mm.SEGMENTS if s["id"] == int(sid))
 
 
+# === CHAIN LIMITS (standing rules, 2026-07-16) ===
+# 1. A chain is at most THREE segments long INCLUDING the initial one --
+#    chained quality deteriorates too much beyond that (each shot opens on a
+#    compressed video frame, and the softness compounds).
+# 2. Usually keep a chain to TWO segments (initial + one continuation); go to
+#    three only when the scene truly cannot break.
+# 3. HARD RULE: a chained segment may not introduce any character who is not in
+#    the INITIAL segment -- every chained shot's cast must be a subset of the
+#    initial shot's cast. A new character needs a new base segment.
+CHAIN_MAX_SEGMENTS = 3
+
+
+def _seg_id_from_filename(path):
+    """Segment id parsed from a pipeline clip name (seg<NN>[_v<N>].mp4), or None."""
+    m = re.match(r"seg(\d+)", Path(path).name)
+    return int(m.group(1)) if m else None
+
+
+def enforce_chain_rules(initial_sid, chained_ids, total):
+    """Enforce the chain limits above BEFORE any generation: hard-abort on a
+    too-long chain or a cast violation; warn at the 3-segment maximum. When the
+    chain source is not a recognizable pipeline segment clip, initial_sid is
+    None and the cast check downgrades to a manual-verification warning."""
+    if total > CHAIN_MAX_SEGMENTS:
+        sys.exit(f"[RULE] chain of {total} segments (including the initial) exceeds "
+                 f"the max of {CHAIN_MAX_SEGMENTS} -- chained quality deteriorates "
+                 f"too much; split the scene into separate takes.")
+    if total == CHAIN_MAX_SEGMENTS:
+        print("[RULE] 3-segment chain -- that is the maximum; chains are usually "
+              "kept to TWO segments including the initial. Proceeding.", flush=True)
+    if initial_sid is None:
+        print("[RULE] cannot tell which segment the chain-source clip belongs to -- "
+              "verify manually that no chained segment introduces a character "
+              "absent from the initial segment (hard rule).", flush=True)
+        return
+    base = set(seg_by_id(initial_sid).get("characters", []))
+    for sid in chained_ids:
+        extra = [c for c in seg_by_id(sid).get("characters", []) if c not in base]
+        if extra:
+            sys.exit(f"[RULE] seg{int(sid):02d} introduces character(s) not in the "
+                     f"initial seg{int(initial_sid):02d}: {', '.join(extra)}. "
+                     f"A chained segment's cast must be a subset of the initial "
+                     f"segment's cast (hard rule) -- give the new character a new "
+                     f"base segment instead.")
+
+
+
 def next_rev_path(sid):
     """Next free videos_continuous/seg<NN>_v<N>.mp4 -- a new versioned take in the
     cut's videos folder (the base seg<NN>.mp4 is v1). Never overwrites."""
@@ -166,8 +246,10 @@ def extract_last_frame(video_path, out_path):
     video_path = Path(video_path)
     if not video_path.exists():
         raise FileNotFoundError(video_path)
-    cmd = ["ffmpeg", "-y", "-sseof", "-0.2", "-i", str(video_path),
-           "-frames:v", "1", "-q:v", "2", str(out_path)]
+    # Decode the final second and keep overwriting the output so the file ends
+    # up holding the TRUE last frame (-sseof -0.2 -frames:v 1 grabs ~5 frames early).
+    cmd = ["ffmpeg", "-y", "-sseof", "-1", "-i", str(video_path),
+           "-vsync", "0", "-update", "1", "-q:v", "2", str(out_path)]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 or not Path(out_path).exists():
         raise RuntimeError(f"frame extract failed: {r.stderr[-400:]}")
@@ -233,6 +315,58 @@ def build_luno_payload(seg, opening_url):
     return payload
 
 
+def build_luno_i2v_payload(seg, opening_url, chained):
+    """Lunostudio single-image IMAGE-TO-VIDEO: the opening frame is the ONLY
+    reference image, which per the Luno docs locks it as the first frame
+    ("Single image = image-to-video"). Character reference images are dropped --
+    attaching any second image flips the API into reference mode and unlocks
+    the first frame. Audio refs are a separate field and are kept. Character
+    DESCRIPTIONS stay in the prompt text (the opening frame already shows the
+    characters in position)."""
+    style = mm.VISUAL_STYLES.get(seg["style"], seg["style"])
+    _audio_idx = mm.audio_index_map(seg)
+    parts = [mm.OPENING_RULE, ""]
+    if chained:
+        parts += [CHAIN_CONTINUITY_NOTE, ""]
+    parts += [f"VISUAL STYLE: {style}", ""]
+    if seg["characters"]:
+        lines = ["CHARACTERS (already in frame in @image1 -- keep their "
+                 "appearance exactly as shown there):"]
+        for key in seg["characters"]:
+            c = mm.CHARACTERS[key]
+            voice_line = ""
+            aidx = _audio_idx.get(key)
+            if aidx:
+                voice_line = (f" His/her voice must match the reference audio "
+                              f"@audio{aidx} -- {c.get('voice_desc', '')}")
+            lines.append(f"- {c['name']}: {(c.get('video_desc') or c['desc'])}{voice_line}")
+        parts += lines + [""]
+    parts.append(f"ACTION AND SOUND ({seg['seconds']} seconds): {mm.spoken_action(seg)}")
+    vn = mm.voice_reference_note(seg)
+    if vn:
+        parts += [""] + vn
+    nn = mm.name_note(seg)
+    if nn:
+        parts += [""] + nn
+    parts += ["", f"CAMERA: {seg['camera']}"]
+    if seg["id"] in INCLUDE_LOCATION_REF:
+        print(f"  [WARN] seg{seg['id']}: location ref skipped -- a second image "
+              f"would flip Luno out of image-to-video mode", flush=True)
+    payload = {
+        "model": mm.SEEDANCE_MODEL,
+        "prompt": "\n".join(parts),
+        "duration": seg["seconds"],
+        "aspect_ratio": mm.SEEDANCE_ASPECT,
+        "resolution": mm.SEEDANCE_RESOLUTION,
+        "mode": mm.SEEDANCE_MODE,
+        "reference_images": [opening_url],
+    }
+    audio_urls = mm.audio_urls_for(seg)
+    if audio_urls:
+        payload["reference_audio"] = audio_urls
+    return payload
+
+
 def run_luno(seg, payload):
     """PRIMARY generator. Returns the finished video URL, or None to fall back."""
     try:
@@ -267,9 +401,10 @@ def run_luno(seg, payload):
     return None
 
 
-def run_nano(seg, opening_url):
-    """BACKUP generator: Nano-GPT image-to-video (opening frame + char refs +
-    audio, NO last_image). Same chaining inputs as Lunostudio."""
+def run_nano(seg, opening_url, chained=False):
+    """Nano-GPT image-to-video (opening frame as imageUrl + char refs + audio,
+    NO last_image). imageUrl is true first-frame conditioning -- the video
+    starts ON the supplied frame, which is what makes chain seams exact."""
     style = mm.VISUAL_STYLES.get(seg["style"], seg["style"])
     refs = []
     angle_map = seg.get("char_ref_angles", {})
@@ -279,6 +414,8 @@ def run_nano(seg, opening_url):
             if gk in mm.GDRIVE_CHAR_REF_IDS:
                 refs.append(mm.gdrive(mm.GDRIVE_CHAR_REF_IDS[gk]))
     prompt = mm.build_openrouter_prompt(seg, style)
+    if chained:
+        prompt = CHAIN_CONTINUITY_NOTE + "\n\n" + prompt
     if seg["id"] in MULTI_AUDIO and multi_audio_for(seg):
         pairs = multi_audio_for(seg)
         audios = [u for _, u in pairs]
@@ -305,12 +442,34 @@ def run_nano(seg, opening_url):
         "duration": seg["seconds"],
         "resolution": mm.SEEDANCE_RESOLUTION,
         "aspect_ratio": getattr(mm, "SEEDANCE_ASPECT", "16:9"),
+        "generateAudio": True,  # required for dialogue on audio-capable models
     }
+    # Nano-GPT's reference_* fields take a JSON-encoded array STRING
+    # (matching nanogpt_video._json_array), not a plain JSON array.
     if audios:
-        body["reference_audios"] = audios
+        body["reference_audios"] = json.dumps(audios)
     if refs:
-        body["reference_images"] = refs
+        body["reference_images"] = json.dumps(refs)
     run_id, resp = _nano_submit(body)
+    # A 429 here is Nano-GPT's transient "too many generations starting" limit,
+    # not a failure: wait and retry rather than returning None (which would fall
+    # back to Luno and re-frame the chained opening).
+    retries = 0
+    while (not run_id and isinstance(resp, dict)
+           and resp.get("_httperror") == 429 and retries < 20):
+        retries += 1
+        print(f"[NANO] seg{seg['id']} start-limit 429 -- retry {retries}/20 in 30s",
+              flush=True)
+        time.sleep(30)
+        run_id, resp = _nano_submit(body)
+    # A 402 is insufficient balance -- it will not recover mid-run, and a silent
+    # Luno fallback would re-frame every remaining chained opening. Abort loudly.
+    if (not run_id and isinstance(resp, dict)
+            and resp.get("_httperror") == 402):
+        raise SystemExit(
+            f"[NANO] seg{seg['id']} INSUFFICIENT BALANCE (402) -- aborting chain. "
+            f"No Luno fallback for chained shots (Luno re-frames openings). "
+            f"Top up Nano-GPT balance, then resume from this segment.")
     if not run_id:
         print(f"[NANO] seg{seg['id']} submit failed: {json.dumps(resp)[:300]}", flush=True)
         return None
@@ -335,12 +494,25 @@ def regen(sid, source, prev_video=None):
     seg = seg_by_id(sid)
     print(f"\n===== REGEN seg{int(sid):02d}  ({seg['title']})  src={source} =====", flush=True)
     opening_url = opening_url_for(sid, source, prev_video)
-    payload = build_luno_payload(seg, opening_url)
-    url = run_luno(seg, payload)
-    provider = "lunostudio"
-    if not url:
-        url = run_nano(seg, opening_url)
+    chained = source == "frame"
+    if CHAIN_PROVIDER == "nanogpt":
+        url = run_nano(seg, opening_url, chained=chained)
         provider = "nano-gpt"
+        if not url:
+            url = run_luno(seg, build_luno_i2v_payload(seg, opening_url, chained))
+            provider = "lunostudio-i2v"
+    elif CHAIN_PROVIDER in ("luno_i2v", "lunostudio_i2v"):
+        url = run_luno(seg, build_luno_i2v_payload(seg, opening_url, chained))
+        provider = "lunostudio-i2v"
+        if not url:
+            url = run_nano(seg, opening_url, chained=chained)
+            provider = "nano-gpt"
+    else:  # legacy reference-mode route (does not pin the first frame)
+        url = run_luno(seg, build_luno_payload(seg, opening_url))
+        provider = "lunostudio"
+        if not url:
+            url = run_nano(seg, opening_url, chained=chained)
+            provider = "nano-gpt"
     if not url:
         print(f"[DONE] seg{int(sid):02d} FAILED on both providers", flush=True)
         return None
@@ -348,8 +520,9 @@ def regen(sid, source, prev_video=None):
     mm.download(url, out)
     ver = out.stem.rsplit("_v", 1)[-1]
     print(f"[DONE] seg{int(sid):02d} via {provider} -> {out.name}", flush=True)
+    cut = " continuous" if mm.CONTINUOUS else ""
     print(f"       film unchanged; select this take with: "
-          f"python3 make_movie.py use {int(sid)} {ver} continuous", flush=True)
+          f"python3 make_movie.py use {int(sid)} {ver}{cut}", flush=True)
     return out
 
 
@@ -362,9 +535,12 @@ def main():
         sid = sys.argv[2]
         source = sys.argv[3]
         prev = sys.argv[4] if len(sys.argv) > 4 else None
+        if source == "frame" and prev:
+            enforce_chain_rules(_seg_id_from_filename(prev), [sid], 2)
         regen(sid, source, prev)
     elif cmd == "chain":
         a, b = sys.argv[2], sys.argv[3]
+        enforce_chain_rules(int(a), [b], 2)
         out_a = regen(a, "still")
         if not out_a:
             print(f"[CHAIN] seg{a} failed; not chaining seg{b}", flush=True)
@@ -373,6 +549,7 @@ def main():
     elif cmd == "chainstill":
         # id1 from its config still, then each subsequent id from the previous output's last frame
         ids = sys.argv[2:]
+        enforce_chain_rules(int(ids[0]), ids[1:], len(ids))
         out = regen(ids[0], "still")
         if not out:
             print(f"[CHAINSTILL] seg{ids[0]} failed; stopping chain", flush=True)
@@ -388,6 +565,7 @@ def main():
         # id1 from prev_video's last frame, then each subsequent id from the previous output's last frame
         prev = sys.argv[2]
         ids = sys.argv[3:]
+        enforce_chain_rules(_seg_id_from_filename(prev), ids, 1 + len(ids))
         cur_prev = prev
         for sid in ids:
             out = regen(sid, "frame", str(cur_prev))

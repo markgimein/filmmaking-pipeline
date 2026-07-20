@@ -179,8 +179,8 @@ def _quotes_in(action):
 def character_quote(prefix, min_words=10, max_words=18):
     """A 5-7 second SECTION of the character's actual dialogue, lifted from the
     screenplay -- a passage TYPICAL of how the character speaks, NOT a generic
-    screen test. At a natural pace (~2.5 words/second) 5-7 seconds is roughly
-    12-18 words, so this prefers the character's first line in that range; if
+    screen test. At a natural pace (~2.7 words/second) 5-7 seconds is roughly
+    13-18 words, so this prefers the character's first line in that range; if
     every line is shorter or longer it takes the longest and trims to
     max_words. Override per character with "voice_ref_line" in CHARACTERS (also
     a real, typical passage from the piece). Returns (quote, segment) -- the

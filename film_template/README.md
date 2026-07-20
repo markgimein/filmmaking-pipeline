@@ -34,9 +34,12 @@ When instructions conflict, the order of authority is:
 ## Standard by default; chained segments only on request
 
 There is a **single** set of templates. Every film is a **standard film**
-unless the user explicitly asks for continuous scenes or chained segments --
-do not use chaining on your own initiative. (If the user does ask, the
-preferred method is forward frame-chaining, below.)
+unless the user asks for continuous scenes or chained segments -- **or unless
+you propose them and the user approves**. The continuous techniques may be
+suggested somewhat more freely than they used to be (2026-07-14), especially
+where a dialogue scene's segment breaks would risk continuity -- but **never
+generate continuous or chained clips without flagging the plan to the user
+first**. (The preferred method is forward frame-chaining, below.)
 
 **If the user gives their own specific rules for video creation in the prompt,
 those rules override the defaults below (and everywhere else in this README).**
@@ -48,12 +51,24 @@ its own and all able to run in parallel. Screenplay rules:
 
 - **No preference for longer segments.** Use whatever length the action
   naturally needs within the 4-15s range; shorter segments are fine.
+- **In dialogue scenes, avoid segment breaks that would create continuity
+  problems.** One 15-second segment is usually preferable to two 8-second
+  ones. The most frequent continuity failure is characters changing their
+  relative positions from one segment to the next in mid-conversation; fewer
+  segment switches avoid it. Keeping the exchange in a single two-speaker
+  segment (next bullet) often solves it -- and where a dialogue scene genuinely
+  won't fit, propose a continuous treatment (flagged before generating).
 - **A segment may contain multiple shots.** A single segment can cut within
   itself -- e.g. to a closeup -- with the cut described in the prompt. Don't
   split a segment only because the shot changes; split where the *scene*
   changes or a different speaker takes over.
-- **No more than one person speaks** on screen in any segment (hard ceiling:
-  two, only where a segment genuinely needs it -- set `voice_audios`).
+- **No more than two people speak** on screen in any segment. A two-person
+  exchange may share one segment -- often better than a continuity-breaking
+  split (previous bullet). For a two-speaker segment set `voice_audios` (each
+  speaker's reference becomes its own `@audioN`), and the `action` text must
+  attribute **every line to its named speaker** (e.g. "Jane, facing Tom, says:
+  '...' Tom replies: '...'") -- see
+  [Dialogue direction](#dialogue-direction-who-a-character-speaks-to).
 - **No conversation** stretches over **more than two segments**. This keeps
   conversations in a standard film very short -- that is **by design**; for
   longer exchanges, use a continuous film. (Voice-overs and narration are not
@@ -63,7 +78,7 @@ its own and all able to run in parallel. Screenplay rules:
 Generate it with the plain commands (`make_movie.py generate`, etc.). Leave
 `"continues_previous"` off every segment.
 
-### Continuous film (only when the user asks)
+### Continuous film (on the user's request or sign-off)
 
 There are two ways to build a continuous scene, and the **preferred** one is
 **forward frame-chaining**:
@@ -118,8 +133,9 @@ even when the rest of the film generates on Lunostudio. See
 **Coherence:** a `continues_previous` segment should keep the **same location**
 (and normally the **same characters**) as the segment it continues, so the
 shared frame makes sense. `make_movie.py` reports any continuation that changes
-location. You still keep to **one speaker per segment** -- the seamlessness comes
-from the shared frame, not from packing a whole exchange into one shot.
+location. The **two-speaker ceiling** applies here too -- and since the
+seamlessness comes from the shared frame, there is no need to pack a whole
+exchange into one shot.
 
 `make_movie.py prompts continuous` lists every continuation (and any warnings)
 and saves the list to `continuous_segments.txt`.
@@ -191,7 +207,7 @@ cp generate_images_template.py ~/Desktop/My_Film/generate_images.py
 cp generate_voices_template.py ~/Desktop/My_Film/generate_voices.py
 cp upload_images_template.py ~/Desktop/My_Film/upload_images.py
 cp make_movie_template.py ~/Desktop/My_Film/make_movie.py
-cp chain_regen_template.py ~/Desktop/My_Film/chain_regen.py  # forward frame-chaining (only when the user asks for chained scenes)
+cp chain_regen_template.py ~/Desktop/My_Film/chain_regen.py  # forward frame-chaining (only with the user's sign-off on chained scenes)
 cp nanogpt_video_template.py ~/Desktop/My_Film/nanogpt_video.py
 cp openrouter_video_template.py ~/Desktop/My_Film/openrouter_video.py  # optional/legacy
 ```
@@ -390,7 +406,7 @@ cast sound alike. Each clip:
 - uses **only** the character's frontal face shot (`@image1`) as its one image
   reference;
 - has the character deliver a **5-7 second section of their own dialogue,
-  typical of how they speak** (roughly 12-18 words) -- never a generic "let me
+  typical of how they speak** (roughly 13-18 words) -- never a generic "let me
   say a few words" screen test. The passage is auto-picked from the character's
   dialogue in `SEGMENTS` (override with `voice_ref_line` in `CHARACTERS` --
   also a real, typical passage from the piece);
@@ -712,11 +728,25 @@ Used for: video segment generation.
 | duration | 4-15 seconds | Default: 5 |
 | aspect_ratio | `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `21:9` | Default: 16:9 |
 | resolution | `480p`, `720p`, `1080p` | Default: 720p; fast mode caps at 720p |
-| mode | `standard`, `fast` | standard: 2-10 min; fast: 1-5 min |
-| reference_images | array of URLs | Up to 9 public URLs |
+| mode | `standard`, `fast` | standard: cinema-grade quality, 2-10 min; fast: iteration quality, 1-5 min. **Always `standard` for film segments** (see quality note below) |
+| reference_images | array of URLs | Up to 9 public URLs. Luno docs: "Single image = image-to-video. Multiple = reference mode." **Tested 2026-07-11: neither mode pins the first frame** -- single-image i2v still re-synthesizes the opening with ~2% zoom drift; exact opening frames need Nano-GPT `imageUrl` (see [Forward frame-chaining](#forward-frame-chaining-preferred-for-continuous-scenes)) |
 | reference_videos | array of URLs | Up to 3 public URLs (Seedance video extend; **not used** by this template's locked-frame continuity) |
 | reference_audio | array of URLs | Up to 3 public URLs |
 | last_frame | URL | Locked end frame for a segment followed by a continuation (its `zclosing` still). **Note: Lunostudio does not actually honor this** -- a locked end frame only works in Seedance keyframe mode on Nano-GPT, with no character refs; join segments are routed there. See [First-and-last-frame (keyframe) join segments](#first-and-last-frame-keyframe-join-segments) |
+
+**Quality ("high bitrate") rule.** Lunostudio's generation API has **no
+bitrate parameter** -- verified against the Luno developer docs on 2026-07-09
+(the complete parameter list is exactly the table above plus an optional
+`tag`; the account dashboard has no quality setting either). Output quality
+is controlled by two things only:
+
+- **`mode` -- always `"standard"`** (cinema-grade, the high-quality encode).
+  `fast` is iteration-quality, caps resolution at 720p, and must never be
+  used for final film segments. `SEEDANCE_MODE = "standard"` is the template
+  default; do not change it to speed up a batch.
+- **`resolution`** (`480p`/`720p`/`1080p`) -- the other quality lever; per
+  the workflow, confirm it with the user before generating (1080p at 10-15s
+  can take 10+ minutes per segment).
 
 **Status values:** `pending` -> `generating` -> `success` or `failed`
 
@@ -862,28 +892,44 @@ everything here.)*
 - Every segment must be between 4 and 15 seconds (no shorter, no longer)
 - **No preference for longer segments** -- use the length the action naturally
   needs; shorter segments are fine
-- **Budget a segment's `seconds` as `(words ÷ 2.5) + beat/action time`**, not
-  as `words ÷ 2.5` alone (see [Pacing](#pacing-scenes-must-not-drag-but-must-still-breathe)).
-  Speech runs ~2.5 words/second, but reserve ~1.5-2s on top for the opening
-  beat, natural pauses, and action -- more if the shot has real staged action or
-  a held pause; slower speech (~1.5-2 wps) for weighty or heightened/verse
-  lines. Spoken words should fill ~60-75% of the runtime, not all of it. Both
-  over-padding and cramming edge-to-edge make a scene play wrong
+- **Budget a segment's `seconds` as `(words ÷ 2.7) + beat/action time`**, not
+  as `words ÷ 2.7` alone (see [Pacing](#pacing-scenes-must-not-drag-but-must-still-breathe)).
+  Speech runs ~2.7 words/second -- that rate is for the words themselves only --
+  so reserve ~1.5-2s on top for the opening beat, natural pauses, and action --
+  more if the shot has real staged action or a held pause; a little faster for
+  emotionally charged scenes, slower (~1.5-2 wps) for weighty or
+  heightened/verse lines. Spoken words should fill ~60-75% of the runtime, not
+  all of it. Both over-padding and cramming edge-to-edge make a scene play wrong
 - **A segment may contain multiple shots.** A segment can cut within itself
   (e.g. to a closeup), with the internal cut described in the video prompt.
   Don't split a segment just because the shot changes -- split where the scene
   changes or a different speaker takes over
 - **Every segment should have its own opening image.** Chained segments (which
   open on the previous shot's extracted last frame instead) are used **only
-  when the user asks** for continuous scenes
-- No segment has more than one person speaking on screen (hard ceiling: two,
-  only where a segment genuinely needs it -- set `voice_audios`)
-- Exception: a character speaking to a radio/phone voice
-- When two characters converse, split into separate segments per speaker
+  when the user asks** for continuous scenes -- and a chain is at most **three
+  segments including the initial one** (usually two), with **no characters in
+  the chained segments who are not in the initial segment** (hard rule; see
+  [Forward frame-chaining](#forward-frame-chaining-preferred-for-continuous-scenes))
+- No more than **two** people speak on screen in any segment. For a
+  two-speaker segment set `voice_audios`, and the action text must attribute
+  **every line to its named speaker** (see
+  [Dialogue direction](#dialogue-direction-who-a-character-speaks-to))
+- A radio/phone voice doesn't count against the ceiling (it isn't on screen)
+- When two characters converse, the exchange may share one segment (a
+  two-speaker segment); split per speaker only where the exchange won't fit or
+  a new composition is genuinely wanted -- and prefer splits that don't create
+  continuity problems (see below)
 - **No conversation stretches over more than two segments** -- conversations in
   a standard film are intentionally very short; for longer exchanges use a
   continuous film's locked-frame continuations. (Voice-overs/narration are not
   conversations and are exempt.)
+- **Minimize segment switches inside a dialogue scene** -- avoid breaks that
+  would create continuity problems: one 15s segment is usually preferable to
+  two 8s ones. Characters changing relative positions between segments is the
+  most frequent continuity failure in dialogue; fewer breaks avoid it. A
+  two-speaker segment (`voice_audios`) usually keeps the exchange in one shot;
+  where it genuinely won't fit, a proposed continuous treatment (flagged before
+  generating clips) beats a continuity-breaking cut.
 - **Every segment that follows a cut begins with an opening image** (a
   continuous film's extension segments are the only segments without one)
 - **Protecting dialogue across cuts:** If a voiceover or line of dialogue would be badly interrupted by a cut, keep the scene in one segment even if it spans what would normally be two compositions. In that case, set `mid_cut_ref` on the segment to the ID of the segment whose opening still represents the second composition -- that image is attached as `@image2` in the video prompt so the model knows where to transition mid-shot. Avoid this when possible; prefer splitting at natural pauses in speech
@@ -919,9 +965,10 @@ seconds  =  (dialogue words ÷ speech-rate)  +  beat/action time
 ```
 
 - **Speech time** = words ÷ the speech-rate for this line. Normal delivery is
-  about **2.5 words/second** (Seedance's own default is slower, ~2 wps, but the
+  about **2.7 words/second** (Seedance's own default is slower, ~2 wps, but the
   target duration pulls it up to a natural conversational pace -- you do not
-  instruct the rate, you *budget* for it).
+  instruct the rate, you *budget* for it). The rate covers **the words
+  themselves only** -- pauses, beats, and action are budgeted separately below.
 - **Beat/action time** = an opening beat before the first word (~0.5-1s), a
   closing beat after the last word (~0.5-1s), any dramatic pause the line calls
   for, and the real time any described physical action needs. A plain
@@ -929,7 +976,7 @@ seconds  =  (dialogue words ÷ speech-rate)  +  beat/action time
   actual staged action or a held dramatic pause needs more.
 - **Sanity check:** over a whole dialogue segment, spoken words should fill only
   about **60-75%** of the runtime, *not* 100%. Put another way, a normal
-  dialogue segment carries roughly **1.5-2 words per second of its total
+  dialogue segment carries roughly **1.6-2 words per second of its total
   length** -- the rest is beats and action. Clamp to 4-15s. Don't over-pad
   either: a generous duration with little to fill it drags, because the model
   stretches whatever time it is given.
@@ -938,14 +985,15 @@ seconds  =  (dialogue words ÷ speech-rate)  +  beat/action time
 -- you are choosing how much time to *allow*, not writing an instruction):
 
 - **Faster (~3 wps):** urgent, panicked, rapid-fire, an argument -- budget less
-  time per word.
+  time per word. An **emotionally charged** scene in general can run a little
+  above the base rate without feeling rushed.
 - **Slower (~1.5-2 wps):** weighty, grief-struck, menacing, reflective -- budget
   more time per word, and write the pause beats into the action so the model
   places them.
 - **Slower for heightened language (~1.5-2 wps):** Shakespeare, verse, archaic
   or formal diction, dense literary text. The meter needs room and the audience
   needs time to parse unfamiliar words -- give these segments a generous
-  duration; never budget them at the full 2.5 wps.
+  duration; never budget them at the full 2.7 wps.
 
 In short: **you control pacing through the `seconds` you budget and the order
 you write the action in -- not through any prompt rule.** `make_movie.py` adds no
@@ -1016,7 +1064,16 @@ necessary):**
   `last_frame`, so it ends on the exact frame the continuation begins on.
 
 ### Continuous films (locked shared frames)
-- A continuous film is built **only when the user asks for one** (see
+
+> **Take limits (apply to every continuous technique):** a continuous take is
+> at most **three segments including the initial one**, usually **two**; and a
+> continuation must not introduce any character absent from the take's initial
+> segment (**hard rule**). `make_movie.py prompts/generate continuous` prints
+> violations in the continuation report -- fix the config rather than generate
+> through them.
+- A continuous film is built **only with the user's sign-off** -- either they
+  asked for one, or it was proposed (e.g. to protect dialogue continuity) and
+  they approved before any clips were generated (see
   [Standard by default](#standard-by-default-chained-segments-only-on-request))
   and generated with the `continuous` commands (`make_movie.py generate
   continuous`), which keep their own files so a standard run from the same
@@ -1043,7 +1100,7 @@ necessary):**
 - **Coherence:** keep a continuation in the **same location** (and normally the
   **same characters**) as the segment it continues, so the shared frame is
   coherent. `make_movie.py prompts continuous` reports any continuation that
-  changes location. Keep one speaker per segment.
+  changes location. The two-speaker-per-segment ceiling applies here too.
 - **Generation:** every segment is independent, so all segments generate **in
   parallel** (submissions throttled `SUBMIT_SPACING`s apart) -- no base-then-extend
   ordering, nothing waits on another segment's video. It skips work already on
@@ -1066,11 +1123,47 @@ locking both ends of a shot, it carries a real frame forward:
    ended on -- a seamless cut with nothing to drift or mirror-flip.
 4. Repeat down the scene.
 
-**Provider policy is the same as the rest of the film: Lunostudio is primary;** a
-shot that fails or returns nothing within ~10 minutes falls back to **Nano-GPT**
-(`doubao-seedance-2-0`). No keyframe mode and no provider-specific end-frame
-handling is needed, because the seam is a real extracted frame rather than a
-locked target.
+**Chain limits (standing rules, 2026-07-16; enforced by `chain_regen.py` and
+`make_movie.py`'s continuation validator):**
+
+- **A chain is at most THREE segments long, INCLUDING the initial segment**
+  (initial + two chained continuations). Beyond that the quality deteriorates
+  too much -- each chained shot opens on a compressed video frame, and the
+  softness and artifacts compound down the chain.
+- **Usually keep a chain to TWO segments** (initial + one continuation). Go to
+  three only when the scene truly cannot break.
+- **HARD RULE -- no new characters after the initial segment.** A chained
+  segment (the 2nd or 3rd of a chain) must not include any character who is not
+  in the initial segment: every chained shot's cast must be a subset of the
+  initial shot's cast. A new character always gets a new base segment (opening
+  on its own still) instead. `chain_regen.py` refuses to run a chain that
+  violates this.
+
+Longer continuous scenes are built as **several short chains**: break the scene
+at a natural cut (a reaction, an insert, an angle change), give the next chain
+its own base segment with a fresh opening still, and chain from there.
+
+**Provider policy for chained shots: Nano-GPT (`doubao-seedance-2-0`) is
+PRIMARY.** Its `imageUrl` field is true image-to-video conditioning and starts
+the video on the supplied frame **pixel-exactly** (verified on The Examined
+Life, 2026-07-11: alignment correlation 0.998 with zero shift on all three test
+seams). **Lunostudio is fallback only, because it does not pin an opening frame
+in any mode** (tested same day, same seam):
+
+- Passing the frame in `reference_images` alongside character refs puts Seedance
+  in **reference mode** -- the opening is mere guidance and the shot is re-staged
+  (~2-8% zoom/pan seam jumps measured).
+- Even **single-image image-to-video** ("Single image = image-to-video" per the
+  Luno docs) re-synthesizes the opening with ~2% zoom drift (correlation 0.85).
+
+On Nano-GPT the chained shot keeps its **character reference images and voice
+references** alongside `imageUrl` (plus `generateAudio: true`; the reference
+image/audio fields take JSON-encoded array strings). First-frame-only i2v
+composes with refs -- the refs-vs-frames exclusivity rule applies only to
+keyframe mode's locked *last* frame. Per-run env override:
+`CHAIN_PROVIDER=luno_i2v` (single-image i2v, drops char refs -- a second image
+would flip it back to reference mode) or `CHAIN_PROVIDER=lunostudio` (legacy
+reference mode).
 
 **Why it's preferred over locked first-and-last-frame joins:**
 
@@ -1078,7 +1171,7 @@ locked target.
 |---|---|---|
 | Character ref images | **kept** (normal image-to-video) | dropped (keyframe mode forbids them) |
 | Seam | previous shot's **actual** last frame -- always matches | a locked target the provider must "honor" |
-| Provider | **Lunostudio primary, Nano-GPT backup** | join shots forced to Nano-GPT keyframe mode |
+| Provider | **Nano-GPT i2v primary** (Luno fallback -- Luno never pins opening frames) | join shots forced to Nano-GPT keyframe mode |
 | Drift / mirror-flip | none | possible if the end frame is ignored |
 | Generation order | **sequential** (each shot needs the previous output) | parallel |
 
@@ -1097,11 +1190,17 @@ python3 chain_regen.py chainstill <id1> <id2> ...        # id1 from its still, t
 python3 chain_regen.py chainfrom <prev_video> <id1> ...  # id1 from an existing clip's last frame, rest chained
 ```
 
-Each shot is written into `videos_continuous/` as a new **versioned take**
-(`seg<NN>_v<N>.mp4`; the original `seg<NN>.mp4` is its "v1") -- nothing is
-overwritten and **the manifest is not touched, so the film is unchanged.** Review
-the takes, then select one with `make_movie.py use <id> <version> continuous` (see
+Each shot is written into the cut's videos folder as a new **versioned take**
+(`seg<NN>_v<N>.mp4`; the original `seg<NN>.mp4` is its "v1") -- `videos_continuous/`
+by default, or `videos/` with **`CHAIN_CUT=standard`** (for a standard film that
+chains at generation time with no `continues_previous` flags, like The Examined
+Life). Nothing is overwritten and **the manifest is not touched, so the film is
+unchanged.** Review the takes, then select one with
+`make_movie.py use <id> <version> [continuous]` (see
 [Regenerating segments and stills](#regenerating-segments-and-stills-versioned-in-place--a-manifest)).
+The chain frame is extracted as the clip's **true final frame** (the old
+`-sseof -0.2` grab landed ~5 frames early -- invisible on a still ending, a
+visible jump on a moving one).
 Two optional per-run env toggles (comma-separated ids): `CHAIN_LOCREF=3,4,5` also
 attaches each shot's location reference still; `CHAIN_MULTIAUDIO=17,18` attaches
 voice references for **all** of a shot's speakers (each mapped to its own
@@ -1110,7 +1209,25 @@ option too -- set `voice_audios` on the segment (see
 [Voice references](#voice-references-the-voice-pipeline)) -- so the env toggle is
 only for ad-hoc runs.
 
+**Nano-GPT error handling (chained shots must NOT silently fall to Luno):**
+
+- **HTTP 429** ("too many video generations are already starting") is a
+  *transient* start-rate limit -- it fires whenever several chains launch in
+  parallel. `run_nano()` retries the submit up to **20 times at 30s intervals**
+  (printing `start-limit 429 -- retry n/20`) instead of treating it as a
+  failure, which would have fallen back to Luno and re-framed the chained
+  opening.
+- **HTTP 402** (insufficient balance) will not recover mid-run, so the script
+  **aborts the whole chain with a clear message** rather than silently
+  generating the rest of the chain on Luno. Top up the Nano-GPT balance, then
+  resume with `chainfrom` from the last completed segment's clip.
+- Any *other* submit failure still falls back to Lunostudio i2v as before.
+
 ### First-and-last-frame (keyframe) join segments
+
+> The take limits above (max three segments per take including the initial,
+> usually two; no new characters after the initial segment -- hard rule) apply
+> to keyframe-joined takes exactly as to chained ones.
 
 *(Alternative method -- prefer [forward frame-chaining](#forward-frame-chaining-preferred-for-continuous-scenes)
 above for new continuous scenes.)*
@@ -1175,7 +1292,7 @@ join segments take the Nano-GPT keyframe path.
   - `prompts` writes an in-scene prompt per character to
     `audio/voice_ref_prompts.txt`. Each prompt has the character deliver a
     **5-7 second section of their own dialogue, typical of how they speak**
-    (~12-18 words; auto-picked from their dialogue in `SEGMENTS`, or set via
+    (~13-18 words; auto-picked from their dialogue in `SEGMENTS`, or set via
     `voice_ref_line` in `CHARACTERS`) -- **not** a generic screen test. The
     clip is played **in the context of its scene**: the prompt carries the
     scene's setting and a short description of the moment the line comes from,
@@ -1220,6 +1337,11 @@ prompt builder; its `CHAIN_MULTIAUDIO` env toggle remains for ad-hoc runs).
   Write this into the action when filling in `SEGMENTS`; there is **no separate
   DIALOGUE DIRECTION section** in the prompt (the old auto-added section and
   the `speaking_to` config key are gone).
+- **In a two-speaker segment this matters double: attribute every line to its
+  named speaker** ("Jane, facing Tom, says: '...' Tom replies: '...'") so the
+  prompt leaves no doubt who speaks what, and set `voice_audios` so each named
+  speaker is tied to their own voice reference (`@audioN`). A line of dialogue
+  the action doesn't attribute is a line Seedance may give to the wrong mouth.
 - For **self-directed speech, a soliloquy, or a voice-over**, make that
   explicit in the action too ("to himself", "voice-over as the camera pans").
 
@@ -1231,7 +1353,19 @@ prompt builder; its `CHAIN_MULTIAUDIO` env toggle remains for ad-hoc runs).
 - Fill in the `PRONUNCIATIONS` glossary in `film_config.py`: map each tricky
   term to a **clean, speakable phonetic respelling** (CAPS = stressed syllable,
   hyphens separate syllables), e.g. `"Ashkenazi": "ahsh-keh-NAH-zee"` or
-  `"Hermia": "HUR-mee-uh"`.
+  `"Hermia": "HUR-mee-uh"`. **When in doubt, include the respelling** -- a
+  glossary entry for a name that would have been fine costs nothing, while a
+  mangled name costs a regeneration.
+- **Names preflight -- before the final video-generation step.** Alongside the
+  length/resolution check that precedes `make_movie.py generate`, sweep the
+  dialogue for any name or proper noun likely to give the model trouble --
+  foreign, archaic, or invented names, unusual place names, ambiguous spellings
+  -- including ones not yet in the glossary. **Flag them to the user and propose
+  a solution for each** (usually a phonetic respelling to add to
+  `PRONUNCIATIONS`; occasionally rephrasing a line so the name isn't spoken, or
+  a short test clip to tune the worst one first). Generation is the slow,
+  costly step -- catching a bad name here is far cheaper than re-rolling
+  segments after.
 - **Bake the pronunciation into the spoken dialogue -- don't rely on a note.**
   This is the key lesson: Seedance voices the *literal* quoted dialogue text, so
   a standalone "pronounce X as Y" instruction does **not** reliably change how it
@@ -1374,7 +1508,7 @@ AND the Film Studio labs (see [Film Studio integration](#film-studio-integration
   palmier_import.txt      # Palmier Pro import manifest (make_movie.py palmier)
   my_film_full.mp4        # final stitched film (standard cut -- ffmpeg path)
 
-  # Continuous film (only when the user asks -- uses its own files, never the above):
+  # Continuous film (only with the user's sign-off -- uses its own files, never the above):
   videos_continuous/             # continuous-version segment videos (+ versioned
     seg01.mp4 ...                #   takes seg<NN>_v<N>.mp4 and its own manifest.txt)
   seedance_prompts_continuous.txt # continuous prompts

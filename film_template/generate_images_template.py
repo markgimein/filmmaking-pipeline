@@ -141,8 +141,23 @@ def generate_character(prefix, desc, variant_name=None, variant_extra=""):
     full_desc = desc + (" " + variant_extra if variant_extra else "")
 
     front_path = char_ref_path(prefix, "front_full_face", variant_name)
-    front_prompt = f"{CHAR_PREAMBLE}\n\nCHARACTER: {full_desc}\n\nSHOT: {ANGLES['front_full_face']}"
-    ok = generate_image(front_prompt, [], front_path)
+    # A variant's front portrait is generated FROM the base front portrait, so
+    # the face never drifts between wardrobe variants (2026-07-10).
+    front_refs = []
+    if variant_name:
+        base_front = char_ref_path(prefix, "front_full_face")
+        if base_front.exists():
+            front_refs = [base_front]
+    if front_refs:
+        front_prompt = (
+            f"{CHAR_PREAMBLE}\n\nCHARACTER: {full_desc}\n\n"
+            f"The attached image shows this exact character. Match the face "
+            f"and hair EXACTLY -- same person; only the wardrobe and styling "
+            f"change as described.\n\nSHOT: {ANGLES['front_full_face']}"
+        )
+    else:
+        front_prompt = f"{CHAR_PREAMBLE}\n\nCHARACTER: {full_desc}\n\nSHOT: {ANGLES['front_full_face']}"
+    ok = generate_image(front_prompt, front_refs, front_path)
     if not ok:
         print(f"  [FAIL] {prefix}: front portrait failed, skipping other angles", flush=True)
         return 0
@@ -441,7 +456,9 @@ def run_stills():
 
     # Every segment is an independent shot, so every segment gets an opening
     # still (its locked first frame). Already-generated stills are skipped.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+    # 8 concurrent workers (raised from 3, 2026-07-09): generate_image()'s
+    # retry-with-backoff absorbs any 429s if the account tier throttles us.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
         list(ex.map(process_one, SEGMENTS))
 
     # Continuous version: copy each continuation's opening onto the previous

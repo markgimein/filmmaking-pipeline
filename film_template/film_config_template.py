@@ -7,16 +7,20 @@ Fill in all sections marked with [FILL IN] for your specific film.
 This config is imported by generate_images.py and make_movie.py.
 
 CONTINUOUS vs. STANDARD
-  Every film is a STANDARD film unless the user explicitly asks for continuous
-  scenes or chained segments -- never chain on your own initiative, and no need
-  to ask about it up front. The choice shapes how the script is written:
+  Every film is a STANDARD film unless the user asks for continuous scenes or
+  chained segments, or approves a flagged proposal for them (continuous can be
+  suggested where dialogue continuity would benefit -- but never generate
+  chained/continuous clips without the user's sign-off). The choice shapes how
+  the script is written:
 
   - STANDARD film (the default): independent shots, each with its own opening
-    image. Script rules: no more than one person speaks per segment, and no
-    conversation stretches over more than two segments (very short BY DESIGN --
-    use a continuous film for longer exchanges; voice-overs/narration are not
-    conversations and can run long). Every segment begins with an opening
-    image. Leave "continues_previous" off every segment.
+    image. Script rules: no more than TWO people speak per segment (a
+    two-speaker segment sets voice_audios and its action text attributes every
+    line to its named speaker), and no conversation stretches over more than
+    two segments (very short BY DESIGN -- use a continuous film for longer
+    exchanges; voice-overs/narration are not conversations and can run long).
+    Every segment begins with an opening image. Leave "continues_previous" off
+    every segment.
 
   - CONTINUOUS film: continuous action or dialogue is held together with LOCKED
     SHARED FRAMES (NOT the Seedance extend feature, which drifts over a chain).
@@ -82,7 +86,11 @@ IMAGE_SIZE = "1280x720"
 SEEDANCE_MODEL = "seedance-2"
 SEEDANCE_RESOLUTION = "480p"  # 480p, 720p, or 1080p
 SEEDANCE_ASPECT = "16:9"
-SEEDANCE_MODE = "standard"  # standard or fast
+# ALWAYS "standard" for film segments: it is the cinema-grade (high-quality)
+# encode, and the ONLY quality control besides resolution -- Lunostudio's API
+# has no bitrate parameter (verified 2026-07-09). "fast" is iteration-quality,
+# caps at 720p, and must never be used for final renders.
+SEEDANCE_MODE = "standard"
 
 # Which provider generates the video segments:
 #   "lunostudio" (default) -- generate on Lunostudio Seedance 2; any segment
@@ -282,6 +290,12 @@ VISUAL_STYLES = {
 # SEGMENTS; only this glossary holds the phonetic form. Expect to iterate the
 # respelling -- generate one short test clip of the speaker saying the names and
 # tune it until it sounds right; pronunciation can take a couple of tries.
+#
+# WHEN IN DOUBT, INCLUDE A RESPELLING -- an entry for a name that would have
+# been fine costs nothing; a mangled name costs a regeneration. And before the
+# final video-generation step, sweep the dialogue for risky names/proper nouns
+# not yet covered here, flag them to the user, and propose a respelling (or
+# other fix) for each.
 
 PRONUNCIATIONS = {
     # Example (value = how it should SOUND; it is injected into the spoken line):
@@ -298,10 +312,19 @@ PRONUNCIATIONS = {
 # SEGMENTATION RULES (the user's own video-creation rules, if any, override
 # these):
 #   - No segment shorter than 4 seconds or longer than 15 seconds.
-#   - No more than one person speaks on screen in a single segment.
+#   - No more than TWO people speak on screen in a single segment. For a
+#     two-speaker segment set voice_audios, and the action text must attribute
+#     EVERY line to its named speaker ("Jane says: '...' Tom replies: '...'").
 #   - No conversation may stretch over more than two segments. Conversations
 #     are very short BY DESIGN; for longer exchanges use a continuous film.
 #     (Voice-overs/narration are not conversations and can run as long as needed.)
+#   - In dialogue scenes, avoid segment breaks that would create continuity
+#     problems: one 15s segment is usually preferable to two 8s ones (the
+#     classic failure is characters changing relative positions between
+#     segments mid-conversation). A two-speaker segment (voice_audios) usually
+#     keeps the exchange in one shot; where it genuinely won't fit, a proposed
+#     continuous treatment (flagged before generating) beats a
+#     continuity-breaking cut.
 #   - Every segment that follows a cut BEGINS with an opening image.
 #   - If a voiceover or dialogue would be badly interrupted by a cut,
 #     keep the scene in one segment even if it spans what would normally
@@ -356,7 +379,7 @@ PRONUNCIATIONS = {
 #                 shot (only keys present in VOICE_REFS are attached). A single
 #                 speaker can still just use voice_audio.
 #   speakers    - (optional) list of speaking character prefixes when a segment
-#                 genuinely needs two (never more than two). Defaults to
+#                 has two (never more than two). Defaults to
 #                 [voice_audio] (or voice_audios). Used by generate_voices.py.
 #   char_ref_angles - (optional) which character reference angles to attach in
 #                 this segment's VIDEO prompt, as {character_prefix: [angles]}.
@@ -393,8 +416,9 @@ PRONUNCIATIONS = {
 #                 continuous with the previous one. Keep the SAME location (and
 #                 normally the same characters) as the segment it continues, so
 #                 the shared frame is coherent -- make_movie.py warns on a location
-#                 change. Keep one speaker per segment; the continuity comes from
-#                 the shared frame, not from packing an exchange into one shot.
+#                 change. The two-speaker-per-segment ceiling applies here too;
+#                 the continuity comes from the shared frame, so an exchange
+#                 needn't be packed into one shot.
 
 SEGMENTS = [
     # Example:
